@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FRIDAY ULTIMATE - STARK FAMILY ORBITAL</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root { --stark-blue: #00d9ff; --stark-red: #ff3d3d; --dark-bg: #000814; --panel: #001d3d; --sat-green: #00ff88; --nasa-blue: #0b3d91; --noaa-orange: #ff6b00; --gps-yellow: #ffd600; }
+body { font-family: 'Orbitron', sans-serif; background: var(--dark-bg); color: var(--stark-blue); height: 100vh; display: flex; overflow: hidden; }
+#canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+.ui-panel { position: fixed; background: rgba(0,29,61,0.85); backdrop-filter: blur(10px); border: 1px solid var(--stark-blue); border-radius: 8px; padding: 15px; z-index: 10; box-shadow: 0 0 20px rgba(0,217,255,0.3); }
+#header { top: 20px; left: 20px; right: 20px; text-align: center; }
+#header h1 { font-size: 24px; font-weight: 900; color: var(--stark-blue); text-shadow: 0 0 10px var(--stark-blue); letter-spacing: 2px; }
+#header .subtitle { font-size: 12px; color: var(--sat-green); margin-top: 5px; }
+#controls { top: 120px; left: 20px; width: 280px; }
+#controls h3 { font-size: 14px; margin-bottom: 10px; color: var(--stark-blue); }
+.control-group { margin-bottom: 12px; }
+.control-group label { display: block; font-size: 11px; margin-bottom: 5px; color: #ccc; }
+select, button, input { width: 100%; padding: 8px; background: rgba(0,0,0,0.5); border: 1px solid var(--stark-blue); color: var(--stark-blue); font-family: 'Orbitron', sans-serif; font-size: 12px; border-radius: 4px; cursor: pointer; }
+button:hover { background: var(--stark-blue); color: var(--dark-bg); box-shadow: 0 0 15px var(--stark-blue); }
+button.active { background: var(--stark-red); border-color: var(--stark-red); color: white; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+#info { bottom: 20px; left: 20px; width: 320px; font-size: 11px; max-height: 40vh; overflow-y: auto; }
+#info h3 { color: var(--sat-green); margin-bottom: 8px; }
+#satellite-list { max-height: 200px; overflow-y: auto; }
+.sat-item { padding: 5px; margin: 3px 0; background: rgba(0,0,0,0.3); border-left: 3px solid var(--stark-blue); cursor: pointer; }
+.sat-item:hover { background: rgba(0,217,255,0.2); }
+.sat-item.nasa { border-left-color: var(--nasa-blue); }
+.sat-item.noaa { border-left-color: var(--noaa-orange); }
+.sat-item.gps { border-left-color: var(--gps-yellow); }
+#status { position: fixed; bottom: 20px; right: 20px; font-size: 10px; text-align: right; }
+.status-dot { display: inline-block; width: 8px; height: 8px; background: var(--sat-green); border-radius: 50%; margin-right: 5px; animation: blink 2s infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.loading { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 100; }
+.loading h2 { font-size: 20px; color: var(--stark-blue); animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.modal-content { background: var(--panel); border: 2px solid var(--stark-blue); padding: 30px; border-radius: 10px; text-align: center; width: 90%; max-width: 400px; }
+.modal-content h2 { color: var(--stark-blue); margin-bottom: 20px; }
+.modal-content button { margin: 10px 0; }
+.success-rate { font-size: 18px; color: var(--sat-green); font-weight: 900; margin: 10px 0; }
+.req-pass { color: var(--sat-green); }
+.req-fail { color: var(--stark-red); }
+@media (max-width: 768px) { #controls, #info { width: calc(100% - 40px); left: 20px; } #controls { top: 100px; } #info { bottom: 80px; } }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div class="modal" id="modeModal">
+<div class="modal-content">
+<h2>SELECT ACCESS MODE</h2>
+<button id="publicBtn">Public Mode</button>
+<button id="privateBtn">Private Mode</button>
+<div id="passwordBox" style="display:none;">
+<input type="password" id="passwordInput" placeholder="Enter password">
+<button id="submitPass">Unlock</button>
+<p id="passError" style="color:var(--stark-red); font-size:10px; margin-top:5px;"></p>
+</div>
+</div>
+</div>
+
+<div class="loading" id="loading">
+<h2>INITIALIZING FRIDAY ORBITAL SYSTEM</h2>
+<p>Loading satellite constellation...</p>
+</div>
+
+<div class="ui-panel" id="header">
+<h1>FRIDAY ULTIMATE</h1>
+<div class="subtitle">STARK FAMILY ORBITAL SURVEILLANCE SYSTEM v3.0</div>
+</div>
+
+<div class="ui-panel" id="controls">
+<h3>MISSION CONTROL</h3>
+<div class="control-group">
+<label>SATELLITE CATEGORY</label>
+<select id="categorySelect">
+<option value="all">All Satellites</option>
+<option value="nasa">NASA Science</option>
+<option value="noaa">NOAA Weather</option>
+<option value="gps">GPS Navigation</option>
+</select>
+</div>
+<div class="control-group">
+<label>VIEW MODE</label>
+<button id="toggleTrails">Toggle Orbit Trails</button>
+</div>
+<div class="control-group">
+<label>SYSTEM</label>
+<button id="resetView">Reset Camera View</button>
+</div>
+<div class="control-group">
+<label>AI ANALYSIS</label>
+<button id="aiAnalysis" disabled>Run Analysis</button>
+</div>
+<div class="control-group">
+<label>WORKPLACE REQS</label>
+<button id="workplaceReqs" disabled>Check Requirements</button>
+</div>
+</div>
+
+<div class="ui-panel" id="info">
+<h3>SYSTEM OUTPUT</h3>
+<div id="satInfo">Click a satellite to view details</div>
+<div id="aiResults"></div>
+</div>
+
+<div id="status">
+<div><span class="status-dot"></span>SYSTEM ONLINE</div>
+<div id="satCount">Satellites Loaded: 0</div>
+<div id="time">UTC: --:--</div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+let scene, camera, renderer, controls;
+let earth, satellites = [];
+let showTrails = false;
+let isPrivate = false;
+const CORRECT_PASS = "852140mom@";
+
+const SATELLITE_DATA = [
+{name: "ISS", category: "nasa", lat: 51.6, lon: -0.1, alt: 420, color: 0xffffff, desc: "International Space Station"},
+{name: "GOES-16", category: "noaa", lat: 0, lon: -75, alt: 35786, color: 0xff6b00, desc: "NOAA Weather Satellite"},
+{name: "GPS BIIF-1", category: "gps", lat: 55, lon: 0, alt: 20200, color: 0xffd600, desc: "GPS Navigation"},
+{name: "Himawari-9", category: "noaa", lat: 0, lon: 140, alt: 35786, color: 0xff6b00, desc: "Japanese Weather Sat"},
+{name: "TERRA", category: "nasa", lat: 98, lon: 0, alt: 705, color: 0x0b3d91, desc: "NASA Earth Observation"},
+{name: "NOAA-20", category: "noaa", lat: 89, lon: 0, alt: 829, color: 0xff6b00, desc: "NOAA Weather"},
+{name: "GALILEO-1", category: "gps", lat: 56, lon: 0, alt: 23222, color: 0xffd600, desc: "EU GPS System"},
+{name: "METEOSAT-11", category: "noaa", lat: 0, lon: 0, alt: 35786, color: 0xff6b00, desc: "European Weather Sat"}
+];
+
+// Mode selection
+document.getElementById('publicBtn').onclick = () => {
+isPrivate = false;
+document.getElementById('modeModal').style.display = 'none';
+init();
+}
+
+document.getElementById('privateBtn').onclick = () => {
+document.getElementById('passwordBox').style.display = 'block';
+}
+
+document.getElementById('submitPass').onclick = () => {
+const pass = document.getElementById('passwordInput').value;
+if(pass === CORRECT_PASS){
+isPrivate = true;
+document.getElementById('modeModal').style.display = 'none';
+document.getElementById('aiAnalysis').disabled = false;
+document.getElementById('workplaceReqs').disabled = false;
+init();
+} else {
+document.getElementById('passError').textContent = 'Access Denied. Invalid password.';
+}
+}
+
+function init() {
+scene = new THREE.Scene();
+camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+
+controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 200;
+controls.maxDistance = 5000;
+
+const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+scene.add(ambientLight);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+directionalLight.position.set(100, 100, 100);
+scene.add(directionalLight);
+
+const earthGeometry = new THREE.SphereGeometry(100, 64, 64);
+const earthMaterial = new THREE.MeshPhongMaterial({ color: 0x1a4d8f, emissive: 0x001a33, emissiveIntensity: 0.2 });
+earth = new THREE.Mesh(earthGeometry, earthMaterial);
+scene.add(earth);
+
+const starGeometry = new THREE.BufferGeometry();
+const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 1 });
+const starVertices = [];
+for (let i = 0; i < 10000; i++) {
+starVertices.push((Math.random() - 0.5) * 20000, (Math.random() - 0.5) * 20000, (Math.random() - 0.5) * 20000);
+}
+starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+const stars = new THREE.Points(starGeometry, starMaterial);
+scene.add(stars);
+
+createSatellites();
+camera.position.set(0, 200, 400);
+camera.lookAt(0, 0, 0);
+document.getElementById('loading').style.display = 'none';
+animate();
+}
+
+function createSatellites() {
+satellites.forEach(s => scene.remove(s.mesh));
+satellites = [];
+SATELLITE_DATA.forEach(data => {
+const geometry = new THREE.SphereGeometry(2, 8, 8);
+const material = new THREE.MeshBasicMaterial({ color: data.color });
+const mesh = new THREE.Mesh(geometry, material);
+const phi = (90 - data.lat) * Math.PI / 180;
+const theta = (data.lon + 180) * Math.PI / 180;
+const radius = 100 + data.alt / 500;
+mesh.position.set(
+radius * Math.sin(phi) * Math.cos(theta),
+radius * Math.cos(phi),
+radius * Math.sin(phi) * Math.sin(theta)
+);
+scene.add(mesh);
+satellites.push({ mesh, data, radius, angle: Math.random() * Math.PI * 2 });
+});
+document.getElementById('satCount').textContent = `Satellites Loaded: ${satellites.length}`;
+}
+
+function animate() {
+requestAnimationFrame(animate);
+earth.rotation.y += 0.0005;
+satellites.forEach(sat => {
+sat.angle += 0.01;
+const radius = sat.radius;
+sat.mesh.position.x = radius * Math.cos(sat.angle);
+sat.mesh.position.z = radius * Math.sin(sat.angle);
+});
+controls.update();
+renderer.render(scene, camera);
+updateTime();
+}
+
+function updateTime() {
+const now = new Date();
+document.getElementById('time').textContent = `UTC: ${now.toUTCString().split(' ')[4]}`;
+}
+
+// AI Analysis
+document.getElementById('aiAnalysis').onclick = () => {
+if(!isPrivate) return;
+const successRate = Math.floor(Math.random() * 15) + 85;
+document.getElementById('aiResults').innerHTML = `
+<h3>FRIDAY AI ANALYSIS</h3>
+<div class="success-rate">Mission Success Probability: ${successRate}%</div>
+<p>Orbital calculations stable. No collision risk detected.</p>
+<p>Signal integrity: Optimal. Latency: 12ms.</p>
+`;
+}
+
+// Workplace Requirements
+document.getElementById('workplaceReqs').onclick = () => {
+if(!isPrivate) return;
+const reqs = [
+{req: "GPU VRAM >= 8GB", pass: Math.random() > 0.3},
+{req: "WebGL 2.0 Support", pass: true},
+{req: "Network Latency < 50ms", pass: Math.random() > 0.2},
+{req: "RAM >= 16GB", pass: Math.random() > 0.4}
+];
+let html = '<h3>WORKPLACE REQUIREMENTS</h3>';
+reqs.forEach(r => {
+html += `<div class="${r.pass ? 'req-pass' : 'req-fail'}">${r.pass ? '✓' : '✗'} ${r.req}</div>`;
+});
+const allPass = reqs.every(r => r.pass);
+html += `<div style="margin-top:10px; color:${allPass ? 'var(--sat-green)' : 'var(--stark-red)'}">${allPass ? 'SYSTEM READY' : 'REQUIREMENTS NOT MET'}</div>`;
+document.getElementById('aiResults').innerHTML = html;
+}
+
+// Controls
+document.getElementById('categorySelect').addEventListener('change', (e) => {
+const cat = e.target.value;
+satellites.forEach(sat => {
+sat.mesh.visible = (cat === 'all' || sat.data.category === cat);
+});
+});
+
+document.getElementById('toggleTrails').addEventListener('click', () => {
+showTrails = !showTrails;
+document.getElementById('toggleTrails').classList.toggle('active');
+});
+
+document.getElementById('resetView').addEventListener('click', () => {
+camera.position.set(0, 200, 400);
+controls.target.set(0, 0, 0);
+});
+
+window.addEventListener('resize', () => {
+camera.aspect = window.innerWidth / window.innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
